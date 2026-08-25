@@ -21,6 +21,7 @@ import (
 
 	hetznercp "github.com/paperclipinc/karpenter-provider-hetzner/pkg/cloudprovider"
 	instancegc "github.com/paperclipinc/karpenter-provider-hetzner/pkg/controllers/instance/garbagecollection"
+	instancetypecapacity "github.com/paperclipinc/karpenter-provider-hetzner/pkg/controllers/instancetype/capacity"
 	"github.com/paperclipinc/karpenter-provider-hetzner/pkg/controllers/nodeclass"
 	"github.com/paperclipinc/karpenter-provider-hetzner/pkg/controllers/pricehealth"
 	hetznerop "github.com/paperclipinc/karpenter-provider-hetzner/pkg/operator"
@@ -70,7 +71,7 @@ func main() {
 
 	// Create the three providers.
 	instanceProvider := instance.NewProviderWithPlacementGroups(&hcloudClient.Server, &hcloudClient.PlacementGroup, cfg.ClusterName, clusterUID, &hcloudClient.Action)
-	typeProvider := instancetype.NewProvider(&hcloudClient.ServerType)
+	typeProvider := instancetype.NewProvider(&hcloudClient.ServerType, cfg.VMMemoryOverheadPercent)
 	imageProvider := imagefamily.NewProvider(&hcloudClient.Image)
 
 	// Create the cloud provider.
@@ -129,6 +130,11 @@ func main() {
 	// against: per NodePool, filtered to that NodeClass's locations.
 	providerControllers = append(providerControllers,
 		pricehealth.NewController(op.GetClient(), cloudProvider))
+
+	// Record the memory real servers report once they boot, so instance types are
+	// sized from measurements rather than the VM-overhead estimate.
+	providerControllers = append(providerControllers,
+		instancetypecapacity.NewController(op.GetClient(), typeProvider))
 
 	// Wire and start all controllers.
 	op.WithControllers(ctx, append(

@@ -127,7 +127,7 @@ func (cp *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim
 	// overlaid prices while the selection below ranks on raw hcloud prices, and the two
 	// can disagree. The decorator wraps from outside, so Create cannot reach the overlaid
 	// view; closing the gap needs core to decorate Create too. The gate defaults off.
-	instanceTypes, err := cp.typeProvider.List(ctx, nodeClass.Spec.Locations)
+	instanceTypes, err := cp.typeProvider.List(ctx, nodeClass)
 	if err != nil {
 		return nil, fmt.Errorf("listing instance types: %w", err)
 	}
@@ -333,7 +333,7 @@ func (cp *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *karpv1.
 		return nil, fmt.Errorf("resolving node class for node pool %s: %w", nodePool.Name, err)
 	}
 
-	return cp.typeProvider.List(ctx, nodeClass.Spec.Locations)
+	return cp.typeProvider.List(ctx, nodeClass)
 }
 
 // IsDrifted determines whether the given NodeClaim has drifted from its desired state.

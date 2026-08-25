@@ -47,7 +47,7 @@ var testPricings = []hcloud.ServerTypeLocationPricing{
 func TestList_NoLocationFilter(t *testing.T) {
 	st := makeServerType("cx11", hcloud.ArchitectureX86, hcloud.CPUTypeShared, 1, 2, 20, testPricings)
 	client := &mockServerTypeClient{types: []*hcloud.ServerType{st}}
-	p := NewProvider(client)
+	p := NewProvider(client, 0)
 
 	types, err := p.List(context.Background(), nil)
 	if err != nil {
@@ -64,10 +64,10 @@ func TestList_NoLocationFilter(t *testing.T) {
 func TestList_LocationFilter(t *testing.T) {
 	st := makeServerType("cx11", hcloud.ArchitectureX86, hcloud.CPUTypeShared, 1, 2, 20, testPricings)
 	client := &mockServerTypeClient{types: []*hcloud.ServerType{st}}
-	p := NewProvider(client)
+	p := NewProvider(client, 0)
 
 	// Only request nbg1; fsn1 offering should be filtered out but type still returned.
-	types, err := p.List(context.Background(), []string{"nbg1"})
+	types, err := p.List(context.Background(), locationsNodeClass("nbg1"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,9 +82,9 @@ func TestList_LocationFilter(t *testing.T) {
 func TestList_LocationFilterExcludesAll(t *testing.T) {
 	st := makeServerType("cx11", hcloud.ArchitectureX86, hcloud.CPUTypeShared, 1, 2, 20, testPricings)
 	client := &mockServerTypeClient{types: []*hcloud.ServerType{st}}
-	p := NewProvider(client)
+	p := NewProvider(client, 0)
 
-	types, err := p.List(context.Background(), []string{"hel1"}) // not in pricings
+	types, err := p.List(context.Background(), locationsNodeClass("hel1")) // not in pricings
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestList_LocationFilterExcludesAll(t *testing.T) {
 
 func TestInstanceType_Capacity(t *testing.T) {
 	st := makeServerType("cx21", hcloud.ArchitectureX86, hcloud.CPUTypeShared, 2, 4, 40, testPricings)
-	it := toInstanceType(st)
+	it := toInstanceType(st, 0)
 
 	cpu := it.Capacity[corev1.ResourceCPU]
 	if cpu.Value() != 2 {
@@ -122,7 +122,7 @@ func TestInstanceType_Capacity(t *testing.T) {
 
 func TestInstanceType_ArchARM(t *testing.T) {
 	st := makeServerType("cax11", hcloud.ArchitectureARM, hcloud.CPUTypeShared, 2, 4, 40, testPricings)
-	it := toInstanceType(st)
+	it := toInstanceType(st, 0)
 
 	archReq := it.Requirements.Get("kubernetes.io/arch")
 	if archReq.Any() != "arm64" {
@@ -132,7 +132,7 @@ func TestInstanceType_ArchARM(t *testing.T) {
 
 func TestInstanceType_ArchX86(t *testing.T) {
 	st := makeServerType("cx11", hcloud.ArchitectureX86, hcloud.CPUTypeShared, 1, 2, 20, testPricings)
-	it := toInstanceType(st)
+	it := toInstanceType(st, 0)
 
 	archReq := it.Requirements.Get("kubernetes.io/arch")
 	if archReq.Any() != "amd64" {
@@ -210,7 +210,7 @@ func TestToInstanceType_KeepsUnpricedOfferingUnavailable(t *testing.T) {
 			{Location: &hcloud.Location{Name: "nbg1"}, Hourly: hcloud.Price{Net: "0.0070"}},
 			{Location: &hcloud.Location{Name: "hel1"}},
 		})
-	it := toInstanceType(st)
+	it := toInstanceType(st, 0)
 	if len(it.Offerings) != 2 {
 		t.Fatalf("expected both offerings to remain in the catalogue, got %d", len(it.Offerings))
 	}
@@ -245,7 +245,7 @@ func TestToInstanceType_IgnoresLocationAvailableFlag(t *testing.T) {
 	st.Locations = []hcloud.ServerTypeLocation{
 		{Location: &hcloud.Location{Name: "nbg1"}, Available: false},
 	}
-	it := toInstanceType(st)
+	it := toInstanceType(st, 0)
 	o := offeringFor(it, "nbg1")
 	if o == nil {
 		t.Fatal("nbg1 offering missing")
@@ -259,7 +259,7 @@ func TestToInstanceType_IgnoresLocationAvailableFlag(t *testing.T) {
 func TestList_ReflectsUnavailable(t *testing.T) {
 	st := makeServerType("cx11", hcloud.ArchitectureX86, hcloud.CPUTypeShared, 1, 2, 20, testPricings)
 	client := &mockServerTypeClient{types: []*hcloud.ServerType{st}}
-	p := NewProvider(client)
+	p := NewProvider(client, 0)
 
 	// Before marking: both offerings (nbg1, fsn1) must be available.
 	before, err := p.List(context.Background(), nil)
@@ -324,7 +324,7 @@ func TestList_PreservesCatalogueUnavailability(t *testing.T) {
 			{Location: &hcloud.Location{Name: "nbg1"}, Hourly: hcloud.Price{Net: "0.0070"}},
 			{Location: &hcloud.Location{Name: "hel1"}},
 		})
-	p := NewProvider(&mockServerTypeClient{types: []*hcloud.ServerType{st}})
+	p := NewProvider(&mockServerTypeClient{types: []*hcloud.ServerType{st}}, 0)
 
 	types, err := p.List(context.Background(), nil)
 	if err != nil {
