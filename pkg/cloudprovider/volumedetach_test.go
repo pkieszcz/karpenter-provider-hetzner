@@ -28,7 +28,7 @@ func buildDeleteCP(t *testing.T, server *hcloud.Server) (*cloudprovider.CloudPro
 	fsc := &fakeServerClient{servers: map[int64]*hcloud.Server{server.ID: server}}
 	cp := cloudprovider.NewCloudProvider(kube,
 		instance.NewProvider(fsc, "test-cluster"),
-		instancetype.NewProvider(&fakeServerTypeClient{}),
+		instancetype.NewProvider(&fakeServerTypeClient{}, 0),
 		imagefamily.NewProvider(&fakeImageClient{}))
 	return cp, fsc
 }
