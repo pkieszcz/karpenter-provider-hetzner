@@ -22,6 +22,7 @@ import (
 	hetznercp "github.com/paperclipinc/karpenter-provider-hetzner/pkg/cloudprovider"
 	instancegc "github.com/paperclipinc/karpenter-provider-hetzner/pkg/controllers/instance/garbagecollection"
 	"github.com/paperclipinc/karpenter-provider-hetzner/pkg/controllers/nodeclass"
+	"github.com/paperclipinc/karpenter-provider-hetzner/pkg/controllers/pricehealth"
 	hetznerop "github.com/paperclipinc/karpenter-provider-hetzner/pkg/operator"
 	"github.com/paperclipinc/karpenter-provider-hetzner/pkg/providers/imagefamily"
 	"github.com/paperclipinc/karpenter-provider-hetzner/pkg/providers/instance"
@@ -120,6 +121,14 @@ func main() {
 			"mode", string(cfg.InstanceGarbageCollectionMode))
 		return
 	}
+
+	// Report nodes Karpenter cannot price. A node priced at zero can never be
+	// consolidated, and the resulting "Can't replace with a cheaper node" reads
+	// as a decision rather than a broken lookup, so the failure is otherwise
+	// silent. Takes the decorated cloud provider because that is what core prices
+	// against: per NodePool, filtered to that NodeClass's locations.
+	providerControllers = append(providerControllers,
+		pricehealth.NewController(op.GetClient(), cloudProvider))
 
 	// Wire and start all controllers.
 	op.WithControllers(ctx, append(
