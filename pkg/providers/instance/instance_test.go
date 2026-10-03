@@ -135,9 +135,17 @@ func TestCreate_CustomLabelsPreserved(t *testing.T) {
 	}
 }
 
+// ownedServer is a server this provider (cluster "test-cluster") created.
+func ownedServer(id int64, name string) *hcloud.Server {
+	return &hcloud.Server{ID: id, Name: name, Labels: map[string]string{
+		apiv1.ServerLabelManagedBy: apiv1.ServerValueManagedBy,
+		apiv1.ServerLabelCluster:   "test-cluster",
+	}}
+}
+
 func TestDelete_RemovesServer(t *testing.T) {
 	client := newMockServerClient()
-	client.servers[42] = &hcloud.Server{ID: 42, Name: "node-42"}
+	client.servers[42] = ownedServer(42, "node-42")
 	p := NewProvider(client, "test-cluster")
 
 	err := p.Delete(context.Background(), "hcloud://42")
@@ -168,13 +176,38 @@ func TestDelete_RaceDeletedReturnsNodeClaimNotFound(t *testing.T) {
 	// concurrent delete in the Hetzner console). Delete must still surface a
 	// NodeClaimNotFoundError so the NodeClaim can be finalized.
 	client := newMockServerClient()
-	client.servers[55] = &hcloud.Server{ID: 55, Name: "node-55"}
+	client.servers[55] = ownedServer(55, "node-55")
 	client.deleteErr = hcloud.Error{Code: hcloud.ErrorCodeNotFound, Message: "not found"}
 	p := NewProvider(client, "test-cluster")
 
 	err := p.Delete(context.Background(), "hcloud://55")
 	if !karpcp.IsNodeClaimNotFoundError(err) {
 		t.Fatalf("expected NodeClaimNotFoundError on delete race, got: %v", err)
+	}
+}
+
+// TestDelete_RefusesServersItDoesNotOwn: one project holds every environment and the
+// token can delete anything in it. A provider ID pointing at a static worker (Terraform
+// labels it cluster=<name> but not karpenter.sh/*) or at another cluster's node must
+// fail loudly, not delete, and not report NodeClaimNotFound (which would drop the claim).
+func TestDelete_RefusesServersItDoesNotOwn(t *testing.T) {
+	for name, labels := range map[string]map[string]string{
+		"static worker": {"cluster": "test-cluster", "managed-by": "terraform"},
+		"other cluster": {apiv1.ServerLabelManagedBy: apiv1.ServerValueManagedBy, apiv1.ServerLabelCluster: "prod"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := newMockServerClient()
+			client.servers[7] = &hcloud.Server{ID: 7, Name: "worker-07", Labels: labels}
+			p := NewProvider(client, "test-cluster")
+
+			err := p.Delete(context.Background(), "hcloud://7")
+			if err == nil || karpcp.IsNodeClaimNotFoundError(err) {
+				t.Fatalf("expected a plain refusal error, got: %v", err)
+			}
+			if _, ok := client.servers[7]; !ok || len(client.deleted) != 0 {
+				t.Error("server was deleted")
+			}
+		})
 	}
 }
 

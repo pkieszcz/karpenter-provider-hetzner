@@ -282,6 +282,15 @@ func (p *Provider) delete(ctx context.Context, providerID string) error {
 		// finalizer. Returning nil makes it requeue indefinitely and leaks the NodeClaim.
 		return karpcp.NewNodeClaimNotFoundError(fmt.Errorf("server %d not found", id))
 	}
+	// The API token can delete every server in the project, which may hold other
+	// clusters and non-Karpenter servers. Only delete what List would return. A plain
+	// error keeps the NodeClaim terminating and loud instead of forgetting it.
+	if server.Labels[apiv1.ServerLabelManagedBy] != apiv1.ServerValueManagedBy ||
+		server.Labels[apiv1.ServerLabelCluster] != p.clusterName {
+		return fmt.Errorf("refusing to delete server %d (%s): not labelled %s=%s,%s=%s",
+			id, server.Name, apiv1.ServerLabelManagedBy, apiv1.ServerValueManagedBy,
+			apiv1.ServerLabelCluster, p.clusterName)
+	}
 
 	log.Info("deleting server", "serverID", id)
 	_, _, err = p.client.DeleteWithResult(ctx, server)
